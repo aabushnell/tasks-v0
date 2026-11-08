@@ -4,7 +4,9 @@
 
 !.gitignore
 
+!.envrc
 !flake.nix
+!flake.lock
 
 !*Makefile
 
