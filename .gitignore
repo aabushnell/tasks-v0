@@ -1,0 +1,12 @@
+
+*
+!*/
+
+!.gitignore
+
+!flake.nix
+
+!*Makefile
+
+!*.cpp
+!*.h
