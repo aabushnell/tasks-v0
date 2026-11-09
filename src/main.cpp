@@ -21,22 +21,22 @@
 constexpr int NB = 16;         // blocks per array
 constexpr size_t BLOCK = 4096; // int64s per block (32 KiB)
 
-static TaskDesc mk(KernelId k, std::vector<Borrow> b, uint64_t a0 = 0) {
-  if (b.size() > MAX_INLINE_BORROWS) {
+static TaskSpec mk(KernelID k, std::vector<Depend> b, uint64_t a0 = 0) {
+  if (b.size() > INLINE_DEPS) {
     fprintf(stderr, "mk: %zu borrows > inline cap\n", b.size());
     _exit(2);
   }
-  TaskDesc d{};
+  TaskSpec d{};
   d.kernel = k;
   d.arg0 = a0;
   d.n_borrows = (uint16_t)b.size();
-  memcpy(d.borrows, b.data(), b.size() * sizeof(Borrow));
+  memcpy(d.dependencies, b.data(), b.size() * sizeof(Depend));
   return d;
 }
 
 // stencil borrows: read {left, mid, right} (clamped), write w
-static std::vector<Borrow> tri(const std::vector<RegionId> &arr, int i,
-                               RegionId w) {
+static std::vector<Depend> tri(const std::vector<BlockID> &arr, int i,
+                               BlockID w) {
   return {
       {arr[std::max(0, i - 1)], 0, BLOCK * 8, Read},
       {arr[i], 0, BLOCK * 8, Read},
@@ -46,13 +46,13 @@ static std::vector<Borrow> tri(const std::vector<RegionId> &arr, int i,
 }
 
 int main() {
-  Arena *A = (Arena *)mmap(nullptr, ARENA_SIZE, PROT_READ | PROT_WRITE,
+  ArenaHeader *A = (ArenaHeader *)mmap(nullptr, ARENA_SIZE, PROT_READ | PROT_WRITE,
                            MAP_SHARED | MAP_ANONYMOUS, -1, 0);
   if (A == MAP_FAILED) {
     perror("mmap");
     return 1;
   }
-  new (A) Arena();
+  new (A) ArenaHeader();
 
   long hw = sysconf(_SC_NPROCESSORS_ONLN);
   int nexec = (int)std::min<long>(std::max(1L, hw), MAX_EXEC);
@@ -61,12 +61,12 @@ int main() {
   Supervisor sup(A, nexec);
 
   // regions: X[0..NB), Y[NB..2NB), scalar — before fork (fixed table)
-  std::vector<RegionId> xr(NB), yr(NB);
+  std::vector<BlockID> xr(NB), yr(NB);
   for (int i = 0; i < NB; i++)
     xr[i] = sup.add_region(BLOCK * 8);
   for (int i = 0; i < NB; i++)
     yr[i] = sup.add_region(BLOCK * 8);
-  const RegionId SCALAR = sup.add_region(8);
+  const BlockID SCALAR = sup.add_region(8);
 
   for (int e = 0; e < nexec; e++)
     if (fork() == 0)
@@ -74,17 +74,17 @@ int main() {
 
   // ---- demo DAG: init X; step X->Y; step Y->X (WAR/WAW wave); sum X ----
   for (int i = 0; i < NB; i++)
-    sup.submit(mk(K_INIT, {{xr[i], 0, BLOCK * 8, Write}}, i));
+    sup.submit_task(mk(K_INIT, {{xr[i], 0, BLOCK * 8, Write}}, i));
   for (int i = 0; i < NB; i++)
-    sup.submit(mk(K_STEP, tri(xr, i, yr[i])));
+    sup.submit_task(mk(K_STEP, tri(xr, i, yr[i])));
   for (int i = 0; i < NB; i++)
-    sup.submit(mk(K_STEP, tri(yr, i, xr[i])));
+    sup.submit_task(mk(K_STEP, tri(yr, i, xr[i])));
   {
-    std::vector<Borrow> b;
+    std::vector<Depend> b;
     for (int i = 0; i < NB; i++)
       b.push_back({xr[i], 0, BLOCK * 8, Read});
     b.push_back({SCALAR, 0, 8, Write});
-    sup.submit(mk(K_SUM, b));
+    sup.submit_task(mk(K_SUM, b));
   }
 
   // serial reference
@@ -128,7 +128,7 @@ int main() {
   auto pct = [](std::vector<uint64_t> &v, double p) {
     return v[(size_t)(p * (v.size() - 1))];
   };
-  int64_t got = *(int64_t *)((char *)A + A->regions[SCALAR].offset);
+  int64_t got = *(int64_t *)((char *)A + A->blocks[SCALAR].offset);
 
   printf("executors            : %d\n", nexec);
   printf("tasks completed      : %zu / %zu\n", sup.completions().size(),
