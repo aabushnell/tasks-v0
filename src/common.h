@@ -12,13 +12,13 @@ using EnvID     = uint32_t;
 using UserID    = uint32_t;
 
 constexpr size_t    ARENA_SIZE      = 64ull << 20;
-constexpr size_t    RING_CAP        = 1024;
+constexpr size_t    DISP_CAP        = 1024;
 constexpr size_t    CMPL_CAP        = 4096;
 constexpr int       MAX_EXEC        = 16;
 constexpr int       MAX_BLOCKS      = 64;
 constexpr int       MAX_ENVS        = 32;
 constexpr size_t    ENV_PATH_LEN    = 192;
-constexpr uint16_t  INLINE_DEPS     = 16;
+constexpr uint16_t  INLINE_DEPS     = 24;
 
 constexpr EnvID     INVALID_ENV     = UINT32_MAX;
 
@@ -47,7 +47,7 @@ struct TaskSpec {
   Depend dependencies[INLINE_DEPS];
 };
 
-struct CompletionRecord {
+struct TaskTrace {
   TaskID id;
   uint64_t enqueue_ts;
   uint64_t pop_ts;
@@ -122,9 +122,9 @@ template <class T, size_t Cap> struct MPSCRing {
 };
 
 // ArenaHeader sits at base of shared memory;
-//  block data sits below it
+//  block-data sits below it
 struct ArenaHeader {
-  alignas(64) std::atomic<uint8_t> shutdown{0};
+  alignas(64) std::atomic<uint8_t> shutdown{ 0 };
 
   uint32_t n_exec = 0;
 
@@ -134,8 +134,11 @@ struct ArenaHeader {
   uint32_t n_envs = 0;
   EnvDesc envs[MAX_ENVS];
 
-  SPSCRing<TaskSpec, RING_CAP> task_ring[MAX_EXEC];
-  MPSCRing<CompletionRecord, CMPL_CAP> cmpl;
+  SPSCRing<TaskSpec, DISP_CAP> dispatch_ring[MAX_EXEC];
+  MPSCRing<TaskTrace, CMPL_CAP> completion_ring;
 };
 
-inline uint64_t arena_data_offset() { return (sizeof(ArenaHeader) + 4095) & ~4095ull; }
+// ptr offset to arena block-data section
+inline uint64_t arena_data_offset() {
+  return (sizeof(ArenaHeader) + 4095) & ~4095ull;
+}

@@ -71,7 +71,7 @@ const EnvKernelMeta* resolve_kernel(
   CPU_SET(idx % std::max(1L, sysconf(_SC_NPROCESSORS_ONLN)), &set);
   sched_setaffinity(0, sizeof(set), &set); // best effort
 
-  auto &ring = AH->task_ring[idx];
+  auto &ring = AH->dispatch_ring[idx];
   while (true) {
     // check for shutdown order
     if (AH->shutdown.load(std::memory_order_acquire))
@@ -83,7 +83,7 @@ const EnvKernelMeta* resolve_kernel(
       sched_yield();
       continue;
     }
-    CompletionRecord rec{
+    TaskTrace rec{
       .id = task.id,
       .enqueue_ts = task.enqueue_ts,
     };
@@ -118,6 +118,6 @@ const EnvKernelMeta* resolve_kernel(
       rec.status = err;
     }
 
-    AH->cmpl.push(rec);
+    AH->completion_ring.push(rec);
   }
 }

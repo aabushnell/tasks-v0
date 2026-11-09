@@ -5,8 +5,6 @@
 class EnvSource {
 public:
     virtual ~EnvSource() = default;
-    // Resolve ref to an existing .so path. May block (fetch).
-    // Returns "" on failure.
     virtual std::string resolve(const std::string& ref) = 0;
 };
 
@@ -20,5 +18,5 @@ public:
     explicit NixEnvSource(std::string roots_dir);
     std::string resolve(const std::string& ref) override;
 private:
-    std::string roots_dir_;   // GC-root links live here for the session
+    std::string roots_dir;
 };

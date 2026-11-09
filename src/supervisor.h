@@ -1,6 +1,3 @@
-// supervisor.hpp — parent-side runtime: region frontiers, dependency
-// inference, dispatch, completion handling. All state here is
-// supervisor-private; executors only ever see the arena.
 #pragma once
 
 #include <random>
@@ -10,12 +7,7 @@
 #include "common.h"
 #include "env_source.h"
 
-// Heap-side region entry: arena offset/size plus the graph frontier used
-// by dependency inference. (Executors read offsets from Arena::regions;
-// the frontier never leaves the supervisor.)
 struct FrontierBlock {
-  uint64_t offset;
-  uint64_t size;
   TaskID last_writer = 0;
   std::vector<TaskID> readers;
 };
@@ -28,40 +20,42 @@ struct TaskState {
 
 class Supervisor {
 public:
-  Supervisor(ArenaHeader *header, int nexec,
-             std::unique_ptr<EnvSource> src = std::make_unique<LocalEnvSource>())
-      : AH(header), nexec_(nexec) {}
+  Supervisor(ArenaHeader *header,
+             std::unique_ptr<EnvSource> src =
+                std::make_unique<LocalEnvSource>())
+      : arena(header), env_src(std::move(src)) {}
 
-  // Carve a region out of the arena and publish it in Arena::regions.
-  // Must be called BEFORE forking executors (shared table is fixed at fork).
+  // WARNING: for now block structure fixed at fork
   BlockID alloc_block(uint64_t size);
 
   EnvID declare_env(const std::string& ref);
 
-  // Assign an id, run frontier inference, enqueue if immediately ready.
   void submit_task(const TaskSpec &task);
 
-  // Dispatch ready tasks and drain completions until every submitted task
-  // has finished. Single user, power-of-two ring choice, no stealing.
-  void run_until_idle();
+  void run();
 
-  size_t n_tasks() const { return tasks.size(); }
-  const std::vector<CompletionRecord> &completions() const { return recs; }
+  size_t n_tasks() const { return submitted_tasks.size(); }
+  const std::vector<TaskTrace> &completions() const { return traces; }
 
 private:
   uint32_t update_edges(const TaskSpec &d);
   void dispatch_ready();
   void drain_completions();
 
-  ArenaHeader *AH;
-  int nexec_;
+  ArenaHeader *arena;
   std::unique_ptr<EnvSource> env_src;
-  uint64_t next_offset = 0; // arena bump allocator, starts at data_off()
+
+  // -- counters --
+  // NOTE: decide init time
+  uint64_t next_offset = 0;
+  TaskID next_task_id = 1;
+
+  // -- runtime structures --
 
   std::vector<FrontierBlock>  frontier;
-  std::vector<TaskState>      tasks; // indexed by id - 1
-  std::vector<TaskID>         ready;
-  std::vector<CompletionRecord> recs;
-  TaskID next_task = 1;
-  std::mt19937 rng_seed{42};
+  std::vector<TaskState>      submitted_tasks;
+  std::vector<TaskID>         ready_tasks;
+  std::vector<TaskTrace>      traces;
+
+  std::mt19937 rng{42};
 };
