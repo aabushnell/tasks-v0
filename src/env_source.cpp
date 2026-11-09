@@ -20,7 +20,12 @@ std::string LocalEnvSource::resolve(const std::string& ref) {
 
 NixEnvSource::NixEnvSource(std::string roots_dir)
     : roots_dir(std::move(roots_dir)) {
-    std::filesystem::create_directories(roots_dir);
+    if (roots_dir.empty()) roots_dir = ".minrt-roots";
+    std::error_code ec;
+    std::filesystem::create_directories(roots_dir, ec);
+    if (ec)
+        fprintf(stderr, "NixEnvSource: roots dir '%s': %s\n",
+                roots_dir.c_str(), ec.message().c_str());
 }
 
 std::string NixEnvSource::resolve(const std::string& ref) {

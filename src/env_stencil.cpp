@@ -1,6 +1,8 @@
 #include "env_abi.h"
 
-// borrows: [0] = block (write), [1] = 8-byte seed (read, params-as-data)
+// borrows:
+//      [0] = block (write),
+//      [1] = 8-byte seed (read)
 static void k_init(void* const* v, const uint64_t* l, uint16_t) {
     int64_t* o = (int64_t*)v[0];
     size_t n = l[0] / 8;
@@ -9,7 +11,9 @@ static void k_init(void* const* v, const uint64_t* l, uint16_t) {
         o[i] = (int64_t)((seed * 2654435761u + i) % 1000);
 }
 
-// borrows: [0..2] = left/mid/right (read), [3] = out (write)
+// borrows:
+//      [0..2] = left/mid/right (read),
+//      [3] = out (write)
 static void k_step(void* const* v, const uint64_t* l, uint16_t) {
     const int64_t *L = (const int64_t*)v[0], *M = (const int64_t*)v[1],
                   *R = (const int64_t*)v[2];
@@ -18,7 +22,9 @@ static void k_step(void* const* v, const uint64_t* l, uint16_t) {
     for (size_t i = 0; i < n; i++) O[i] = (L[i] + 2 * M[i] + R[i]) / 4;
 }
 
-// borrows: [0..n-2] = partials (read), [n-1] = scalar (write)
+// borrows:
+//      [0..n-2] = partials (read),
+//      [n-1] = scalar (write)
 static void k_sum(void* const* v, const uint64_t* l, uint16_t nv) {
     int64_t s = 0;
     for (uint16_t b = 0; b + 1 < nv; b++) {

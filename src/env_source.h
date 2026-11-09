@@ -24,7 +24,9 @@ private:
 };
 
 inline std::unique_ptr<EnvSource> mk_env_source(const std::string& kind) {
-    if (kind == "nix")
-        return std::make_unique<NixEnvSource>(".minrt-roots");
+    if (kind == "nix") {
+        const char* d = getenv("MINRT_ROOTS");
+        return std::make_unique<NixEnvSource>(d && *d ? d : ".minrt-roots");
+    }
     return std::make_unique<LocalEnvSource>();
 }

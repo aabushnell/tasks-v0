@@ -67,12 +67,16 @@ int main(int argc, char **argv) {
 
   Supervisor sup(AH, mk_env_source(kind));
 
-  EnvID stencil = sup.declare_env("./stencil.so");
+  EnvID stencil = sup.declare_env(ref);
   if (stencil == INVALID_ENV) return EXIT_FAILURE;
 
   printf("env source: %s\n", AH->envs[stencil].path);
 
-  // regions: X[0..NB), Y[NB..2NB), scalar — before fork (fixed table)
+  // blocks:
+  //    X[0..NB),
+  //    Y[NB..2NB),
+  //    SCALAR,
+  //    SEEDS
   std::vector<BlockID> xr(NB), yr(NB);
   for (int i = 0; i < NB; i++)
     xr[i] = sup.alloc_block(BL_LEN * 8);
@@ -150,7 +154,7 @@ int main(int argc, char **argv) {
     /* spin */
   }
 
-  // telemetry
+  // result analysis (from traces)
   std::vector<uint64_t> lat, run;
   size_t errors = 0;
   for (auto &trace : sup.completions()) {
