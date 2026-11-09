@@ -46,7 +46,11 @@ static std::vector<Depend> tri(
   };
 }
 
-int main() {
+int main(int argc, char **argv) {
+  const std::string kind = argc > 1 ? argv[1] : "local";
+  const std::string ref  = argc > 2 ? argv[2]
+        : (kind == "nix" ? "./result" : "./env_stencil.so");
+
   ArenaHeader *AH = (ArenaHeader *)mmap(
       nullptr, ARENA_SIZE, PROT_READ | PROT_WRITE,
       MAP_SHARED | MAP_ANONYMOUS, -1, 0
@@ -61,10 +65,12 @@ int main() {
   int n_exec = (int)std::min<long>(std::max(1L, hw), MAX_EXEC);
   AH->n_exec = n_exec;
 
-  Supervisor sup(AH);
+  Supervisor sup(AH, mk_env_source(kind));
 
   EnvID stencil = sup.declare_env("./stencil.so");
   if (stencil == INVALID_ENV) return EXIT_FAILURE;
+
+  printf("env source: %s\n", AH->envs[stencil].path);
 
   // regions: X[0..NB), Y[NB..2NB), scalar — before fork (fixed table)
   std::vector<BlockID> xr(NB), yr(NB);
@@ -85,7 +91,12 @@ int main() {
       executor_main(AH, e);
   }
 
-  // ---- demo DAG: init X; step X->Y; step Y->X (WAR/WAW wave); sum X ----
+  // ---- demo DAG:
+  //    init X;
+  //    step X->Y;
+  //    step Y->X (WAR/WAW wave);
+  //    sum X
+  // ----
   for (int i = 0; i < NB; i++)
     sup.submit_task(mk(stencil, K_INIT, {
       { xr[i], 0, BL_LEN * 8, Write },
@@ -103,7 +114,6 @@ int main() {
     sup.submit_task(mk(stencil, K_SUM, deps));
   }
 
-  // serial reference
   std::vector<std::vector<int64_t>> rx(NB, std::vector<int64_t>(BL_LEN)),
                                     ry(NB, std::vector<int64_t>(BL_LEN));
   for (int i = 0; i < NB; i++) {
@@ -125,10 +135,10 @@ int main() {
   step(rx, ry);
   step(ry, rx);
 
-  int64_t ref = 0;
+  int64_t ref_sum = 0;
   for (int i = 0; i < NB; i++) {
     for (size_t j = 0; j < BL_LEN; j++)
-      ref += rx[i][j];
+      ref_sum += rx[i][j];
   }
 
   uint64_t t0 = now_ns();
@@ -164,6 +174,6 @@ int main() {
   printf("kernel run p50 / p99 : %.1f / %.1f us\n", pct(run, .5) / 1e3,
          pct(run, .99) / 1e3);
   printf("checksum             : %lld (ref %lld) %s\n", (long long)got,
-         (long long)ref, got == ref ? "OK" : "MISMATCH");
-  return got == ref && errors == 0 ? 0 : 1;
+         (long long)ref_sum, got == ref_sum ? "OK" : "MISMATCH");
+  return got == ref_sum && errors == 0 ? 0 : 1;
 }

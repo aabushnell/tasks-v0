@@ -1,4 +1,5 @@
 #include "supervisor.h"
+#include "common.h"
 
 BlockID Supervisor::alloc_block(uint64_t size) {
   if (next_offset == 0) next_offset = arena_data_offset();
@@ -20,9 +21,18 @@ EnvID Supervisor::declare_env(const std::string& ref) {
     return INVALID_ENV;
   }
 
+  if (auto it = env_ids.find(so); it != env_ids.end())
+    return it->second;
+
+  if (arena->n_envs >= MAX_ENVS) {
+    fprintf(stderr, "declare_env: env slots full\n");
+    return INVALID_ENV;
+  }
+
   EnvID id = arena->n_envs++;
   memset(arena->envs[id].path, 0, ENV_PATH_LEN);
   memcpy(arena->envs[id].path, so.data(), so.size());
+  env_ids.emplace(so, id);
 
   return id;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <random>
+#include <unordered_map>
 #include <vector>
 #include <cstring>
 
@@ -43,7 +44,11 @@ private:
   void drain_completions();
 
   ArenaHeader *arena;
+
+  // -- env handling --
+
   std::unique_ptr<EnvSource> env_src;
+  std::unordered_map<std::string, EnvID> env_ids;
 
   // -- counters --
   // NOTE: decide init time
